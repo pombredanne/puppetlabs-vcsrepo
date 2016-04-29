@@ -38,10 +38,19 @@ Puppet::Type.newtype(:vcsrepo) do
           "The provider understands the CVS_RSH environment variable"
 
   feature :depth,
-          "The provider can do shallow clones"
+          "The provider can do shallow clones or set scope limit"
+
+  feature :branch,
+          "The name of the branch"
 
   feature :p4config,
           "The provider understands Perforce Configuration"
+
+  feature :submodules,
+          "The repository contains submodules which can be optionally initialized"
+
+  feature :conflict,
+          "The provider supports automatic conflict resolution"
 
   ensurable do
     attr_accessor :latest
@@ -60,6 +69,8 @@ Puppet::Type.newtype(:vcsrepo) do
         end
       when :bare
         return is == :bare
+      when :mirror
+        return is == :mirror
       end
     end
 
@@ -69,6 +80,12 @@ Puppet::Type.newtype(:vcsrepo) do
     end
 
     newvalue :bare, :required_features => [:bare_repositories] do
+      if !provider.exists?
+        provider.create
+      end
+    end
+
+    newvalue :mirror, :required_features => [:bare_repositories] do
       if !provider.exists?
         provider.create
       end
@@ -100,16 +117,6 @@ Puppet::Type.newtype(:vcsrepo) do
       prov = @resource.provider
       if prov
         if prov.working_copy_exists?
-          if @resource.value(:force)
-            if noop
-              notice "Noop Mode - Would have deleted repository and re-created from latest"
-            else
-              notice "Deleting current repository before recloning"
-              prov.destroy
-              notice "Create repository from latest"
-              prov.create
-            end
-          end
           (@should.include?(:latest) && prov.latest?) ? :latest : :present
         elsif prov.class.feature?(:bare_repositories) and prov.bare_exists?
           :bare
@@ -211,11 +218,31 @@ Puppet::Type.newtype(:vcsrepo) do
     desc "The value to be used to do a shallow clone."
   end
 
+  newparam :branch, :required_features => [:branch] do
+    desc "The name of the branch to clone."
+  end
+
   newparam :p4config, :required_features => [:p4config] do
     desc "The Perforce P4CONFIG environment."
   end
 
+  newparam :submodules, :required_features => [:submodules] do
+    desc "Initialize and update each submodule in the repository."
+    newvalues(:true, :false)
+    defaultto true
+  end
+
+  newparam :conflict do
+    desc "The action to take if conflicts exist between repository and working copy"
+  end
+
+  newparam :trust_server_cert do
+    desc "Trust server certificate"
+    newvalues(:true, :false)
+    defaultto :false
+  end
+
   autorequire(:package) do
-    ['git', 'git-core']
+    ['git', 'git-core', 'mercurial']
   end
 end
